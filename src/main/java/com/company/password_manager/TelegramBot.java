@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
@@ -80,11 +81,29 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void handleGet(long chatId, Long id) {
         try {
             String password = passwordService.getDecryptedPassword(id);
-            sendMessage(chatId, "Пароль: " + password);
+            SendMessage message = new SendMessage();
+            message.setChatId(chatId);
+            message.setText("Пароль: " + password + "\n\nСообщение исчезнет через 60 секунд.");
+            var sentMessage = execute(message);
+            int messageId = sentMessage.getMessageId();
+
+            new Thread(() -> {
+                try {
+                    Thread.sleep(60000);
+                    DeleteMessage deleteMessage = new DeleteMessage();
+                    deleteMessage.setChatId(chatId);
+                    deleteMessage.setMessageId(messageId);
+                    execute(deleteMessage);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+
         } catch (Exception e) {
             sendMessage(chatId, "Пароль не найден.");
         }
     }
+
 
     private void handleList(long chatId) {
         var passwords = passwordService.getPasswords(chatId);
@@ -127,5 +146,6 @@ public class TelegramBot extends TelegramLongPollingBot {
             sendMessage(chatId, "Пароль не найден.");
         }
     }
+
 
 }
