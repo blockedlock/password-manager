@@ -18,6 +18,10 @@ public class PasswordService {
         return passwordRepository.findByTelegramId(telegramId);
     }
 
+    public Password getPasswordById(Long id) {
+        return passwordRepository.findById(id).orElseThrow();
+    }
+
     public Password addPassword(Long telegramId, String serviceName, String login, String password) throws Exception {
         Password p = new Password();
         p.setTelegramId(telegramId);

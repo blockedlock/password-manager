@@ -6,9 +6,15 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -19,7 +25,6 @@ public class TelegramBot extends TelegramLongPollingBot {
     private final String username;
     private final Map<Long, String> userState = new HashMap<>();
     private final Map<Long, String[]> userTempData = new HashMap<>();
-
 
     public TelegramBot(PasswordService passwordService,
                        @Value("${telegram.bot.token}") String token,
@@ -45,14 +50,25 @@ public class TelegramBot extends TelegramLongPollingBot {
         if (update.hasMessage() && update.getMessage().hasText()) {
             String text = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
-
             String state = userState.getOrDefault(chatId, "IDLE");
 
             if (text.equals("/start")) {
-                sendMessage(chatId, "Привет! Я менеджер паролей.\n/list - список паролей\n/add - добавить пароль");
-            } else if (text.equals("/list")) {
+                ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup();
+                keyboard.setResizeKeyboard(true);
+                KeyboardRow row = new KeyboardRow();
+                row.add("📋 Список");
+                row.add("➕ Добавить");
+                keyboard.setKeyboard(List.of(row));
+
+                SendMessage message = new SendMessage();
+                message.setChatId(chatId);
+                message.setText("Привет! Я менеджер паролей.");
+                message.setReplyMarkup(keyboard);
+                try { execute(message); } catch (Exception e) { e.printStackTrace(); }
+
+            } else if (text.equals("📋 Список") || text.equals("/list")) {
                 handleList(chatId);
-            } else if (text.equals("/add")) {
+            } else if (text.equals("➕ Добавить") || text.equals("/add")) {
                 userState.put(chatId, "WAITING_SERVICE");
                 sendMessage(chatId, "Введи название сервиса:");
             } else if (state.equals("WAITING_SERVICE")) {
@@ -66,24 +82,61 @@ public class TelegramBot extends TelegramLongPollingBot {
             } else if (state.equals("WAITING_PASSWORD")) {
                 userTempData.get(chatId)[2] = text;
                 handleSave(chatId);
-            } else if (text.startsWith("/get ")) {
-            Long id = Long.parseLong(text.substring(5));
-            handleGet(chatId, id);
-            } else if (text.startsWith("/delete ")) {
-                Long id = Long.parseLong(text.substring(8));
-                handleDelete(chatId, id);
             }
 
+        } else if (update.hasCallbackQuery()) {
+            String data = update.getCallbackQuery().getData();
+            long chatId = update.getCallbackQuery().getMessage().getChatId();
 
+            if (data.startsWith("get_")) {
+                Long id = Long.parseLong(data.substring(4));
+                handleGet(chatId, id);
+            } else if (data.startsWith("delete_")) {
+                Long id = Long.parseLong(data.substring(7));
+                handleDelete(chatId, id);
+            }
         }
+    }
+
+    private void handleList(long chatId) {
+        var passwords = passwordService.getPasswords(chatId);
+        if (passwords.isEmpty()) {
+            sendMessage(chatId, "Паролей нет.");
+            return;
+        }
+
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        for (Password p : passwords) {
+            InlineKeyboardButton btn = new InlineKeyboardButton(p.getServiceName());
+            btn.setCallbackData("get_" + p.getId());
+            rows.add(List.of(btn));
+        }
+
+        markup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText("Твои сервисы:");
+        message.setReplyMarkup(markup);
+        try { execute(message); } catch (Exception e) { e.printStackTrace(); }
     }
 
     private void handleGet(long chatId, Long id) {
         try {
-            String password = passwordService.getDecryptedPassword(id);
+            Password p = passwordService.getPasswordById(id);
+
+            InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+            InlineKeyboardButton deleteBtn = new InlineKeyboardButton("🗑 Удалить");
+            deleteBtn.setCallbackData("delete_" + id);
+            markup.setKeyboard(List.of(List.of(deleteBtn)));
+
             SendMessage message = new SendMessage();
             message.setChatId(chatId);
-            message.setText("Пароль: " + password + "\n\nСообщение исчезнет через 60 секунд.");
+            message.setText("🔑 " + p.getServiceName() + "\nЛогин: " + p.getLogin() + "\nПароль: " + passwordService.getDecryptedPassword(id) + "\n\nСообщение исчезнет через 60 секунд.");
+            message.setReplyMarkup(markup);
+
             var sentMessage = execute(message);
             int messageId = sentMessage.getMessageId();
 
@@ -91,7 +144,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                 try {
                     Thread.sleep(60000);
                     DeleteMessage deleteMessage = new DeleteMessage();
-                    deleteMessage.setChatId(chatId);
+                    deleteMessage.setChatId(String.valueOf(chatId));
                     deleteMessage.setMessageId(messageId);
                     execute(deleteMessage);
                 } catch (Exception e) {
@@ -104,20 +157,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-
-    private void handleList(long chatId) {
-        var passwords = passwordService.getPasswords(chatId);
-        if (passwords.isEmpty()) {
-            sendMessage(chatId, "Паролей нет. Используй /add чтобы добавить.");
-            return;
-        }
-        StringBuilder sb = new StringBuilder("Твои сервисы:\n");
-        for (Password p : passwords) {
-            sb.append(p.getId()).append(". ").append(p.getServiceName()).append("\n");
-        }
-        sendMessage(chatId, sb.toString());
-    }
-
     private void sendMessage(long chatId, String text) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
@@ -128,6 +167,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             e.printStackTrace();
         }
     }
+
     private void handleSave(long chatId) {
         String[] data = userTempData.get(chatId);
         try {
@@ -139,6 +179,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         userState.remove(chatId);
         userTempData.remove(chatId);
     }
+
     private void handleDelete(long chatId, Long id) {
         if (passwordService.deletePassword(id)) {
             sendMessage(chatId, "Пароль удалён.");
@@ -146,6 +187,4 @@ public class TelegramBot extends TelegramLongPollingBot {
             sendMessage(chatId, "Пароль не найден.");
         }
     }
-
-
 }
