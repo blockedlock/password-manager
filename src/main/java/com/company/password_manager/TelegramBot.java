@@ -17,7 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static java.awt.SystemColor.text;
+
 
 @Component
 public class TelegramBot extends TelegramLongPollingBot {
@@ -54,6 +54,13 @@ public class TelegramBot extends TelegramLongPollingBot {
             long chatId = update.getMessage().getChatId();
             String state = userState.getOrDefault(chatId, "IDLE");
 
+            if (text.equals("Отмена")) {
+                userState.remove(chatId);
+                userTempData.remove(chatId);
+                sendMessage(chatId, "Отменено");
+                return;
+            }
+
             if (text.equals("/start")) {
                 ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup();
                 keyboard.setResizeKeyboard(true);
@@ -63,7 +70,11 @@ public class TelegramBot extends TelegramLongPollingBot {
                 KeyboardRow row2 = new KeyboardRow();
                 row2.add("👥 Доступ");
                 row2.add("🔗 Чужие пароли");
-                keyboard.setKeyboard(List.of(row, row2));
+                KeyboardRow row3 = new KeyboardRow();
+                row3.add("Отмена");
+                keyboard.setKeyboard(List.of(row,row2,row3));
+
+
 
                 SendMessage message = new SendMessage();
                 message.setChatId(chatId);
