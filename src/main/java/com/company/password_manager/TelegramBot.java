@@ -170,7 +170,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             SendMessage credentialsMsg = new SendMessage();
             credentialsMsg.setChatId(chatId);
-            credentialsMsg.setText("🔑 " + p.getServiceName() + "\n👤 Логин: <code>" + p.getLogin() + "</code>\n🔒 Пароль: <code>" + decrypted + "</code>");
+            credentialsMsg.setText("🔑 " + p.getServiceName() + "\n👤 Логин: <code>" + p.getLogin() + "</code>\n🔒 Пароль: <code>" + decrypted + "</code>\n📅 Добавлен: " + p.getCreatedAt().toLocalDate());
             credentialsMsg.setParseMode("HTML");
             credentialsMsg.setReplyMarkup(markup);
             var sentMessage = execute(credentialsMsg);

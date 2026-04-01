@@ -6,6 +6,10 @@ import jakarta.persistence.*;
 @Table(name = "passwords")
 public class Password {
 
+    private java.time.LocalDateTime createdAt;
+
+    public java.time.LocalDateTime getCreatedAt() { return createdAt; }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
