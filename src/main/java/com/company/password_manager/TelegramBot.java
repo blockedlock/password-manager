@@ -133,6 +133,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
     private void handleList(long chatId) {
+
         var passwords = passwordService.getPasswords(chatId);
         if (passwords.isEmpty()) {
             sendMessage(chatId, "Паролей нет.");
@@ -152,7 +153,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
-        message.setText("Твои сервисы:");
+        message.setText("Твои сервисы (" + passwords.size() + "):");
         message.setReplyMarkup(markup);
         try { execute(message); } catch (Exception e) { e.printStackTrace(); }
     }
